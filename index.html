@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat with GPT-3.5-turbo</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <!-- Font Awesomeのリンクを追加 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #appWrapper {
+            width: 70%;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        #chatContainer {
+            overflow-y: auto;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        #chatHistory {
+            padding-bottom: 100px;
+        }
+
+        #chatForm {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #f2f2f2;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        #prompt {
+            flex-grow: 1;
+            margin: 10px;
+            padding: 12px 20px;
+            box-sizing: border-box;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            max-width: 70%
+        }
+
+
+        #submitButton {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            transition-duration: 0.4s;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        #submitButton:hover {
+            background-color: #45a049;
+        }
+
+        .message {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .user {
+            background-color: #e0ffe0;
+        }
+
+        .assistant {
+            background-color: #e0e0ff;
+        }
+
+        .deleteButton {
+            float: right;
+            cursor: pointer;
+            font-size: 16px;
+            color: red;
+        }
+
+        #settingsModal {
+            display: none;
+            position: fixed;
+            z-index: 999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        #settingsButton {
+            background-color: transparent;
+            border: none;
+            color: #333;
+            padding: 5px;
+            font-size: 20px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 20% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 60%;
+            max-width: 400px;
+            text-align: center;
+            position: relative;
+        }
+
+        .modal-header h2 {
+            margin-top: 0;
+        }
+
+        .modal-header .settings-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: transparent;
+            border: none;
+            color: #333;
+            padding: 0;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            transition-duration: 0.4s;
+            cursor: pointer;
+        }
+
+        .modal-footer button:hover {
+            background-color: #45a049;
+        }
+
+        .modal-header .settings-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: transparent;
+            border: none;
+            color: #333;
+            padding: 0;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .settings-button i {
+            font-size: 24px;
+            color: #888;
+        }
+
+        .waiting-message:before {
+            content: "...";
+            animation: ellipsis-animation 1s infinite;
+        }
+
+        @keyframes ellipsis-animation {
+            0% {
+                content: ".";
+            }
+
+            33% {
+                content: "..";
+            }
+
+            66% {
+                content: "...";
+            }
+        }
+
+        #apiKeyInput {
+            width: 300px;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="appWrapper">
+        <h1>Chat with GPT-3.5-turbo</h1>
+
+        <div id="chatContainer">
+            <div id="chatHistory"></div>
+        </div>
+
+        <form id="chatForm">
+            <textarea id="prompt" name="prompt" rows="4" placeholder="Your message"></textarea>
+            <button type="submit" id="submitButton" class="submit-button"><i class="fas fa-paper-plane"></i></button>
+            <button type="button" id="settingsButton"><i class="fas fa-cog"></i></button>
+        
+        </form>
+
+        <div id="settingsModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <p>APIキーはローカルに保存されるため、API利用以外の用途ではサーバーなどに記録されることはありません。</p>
+                    <button id="closeModalButton" class="settings-button"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <label for="apiKeyInput">API Key:</label>
+                    <input type="text" id="apiKeyInput" name="apiKeyInput">
+                </div>
+                <div class="modal-footer">
+                    <button id="saveSettingsButton">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            $(document).ready(function () {
+                var chatHistory = localStorage.getItem('chatHistory') ? JSON.parse(localStorage.getItem('chatHistory')) : [];
+                var apiKey = localStorage.getItem('apiKey');
+
+                // restore chat history from local storage
+                for (var i = 0; i < chatHistory.length; i++) {
+                    appendMessage(chatHistory[i].role, chatHistory[i].content);
+                }
+
+                // Add click listener to delete button
+                $("#chatHistory").on('click', '.deleteButton', function () {
+                    var index = $(this).parent().index();
+                    chatHistory.splice(index, 1);
+                    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+                    $(this).parent().remove();
+                    $("#chatHistory").children().each(function (i, message) {
+                        $(message).attr('data-index', i);
+                    });
+                });
+
+                $("#chatForm").submit(function (e) {
+                    e.preventDefault();
+                    var prompt = $("#prompt").val().trim();
+                    if (prompt === '') {
+                        return;
+                    }
+
+                    $("#prompt").val('');
+                    $("#submitButton").prop("disabled", true);
+
+                    // append user message to history
+                    chatHistory.push({ "role": "user", "content": prompt });
+                    appendMessage("user", prompt, chatHistory.length - 1);
+
+                    // save chat history to local storage
+                    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+
+                    var messages = chatHistory.map(function (message) {
+                        return {
+                            'role': message.role,
+                            'content': message.content
+                        };
+                    });
+
+                    // Add waiting message to history
+                    var waitingMessageIndex = chatHistory.length;
+                    chatHistory.push({ "role": "assistant", "content": "..." });
+                    appendMessage("assistant waiting-message", "...", waitingMessageIndex);
+
+                    $.ajax({
+                        url: 'https://api.openai.com/v1/chat/completions',
+                        type: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + apiKey
+                        },
+                        data: JSON.stringify({
+                            "model": "gpt-3.5-turbo",
+                            "messages": messages
+                        }),
+                        success: function (data) {
+                            var botMessage = data['choices'][0]['message']['content'];
+
+                            // Update waiting message with the actual bot message
+                            chatHistory[waitingMessageIndex].content = botMessage;
+                            updateMessage("assistant", botMessage, waitingMessageIndex);
+
+                            // save chat history to local storage
+                            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+
+                            $("#submitButton").prop("disabled", false);
+                        },
+                        error: function (xhr, ajaxOptions, thrownError) {
+                            alert(xhr.status);
+                            alert(thrownError);
+                            $("#submitButton").prop("disabled", false);
+                        }
+                    });
+                });
+
+                $("#settingsButton").click(function () {
+                    $("#apiKeyInput").val(apiKey);
+                    $("#settingsModal").show();
+                });
+
+                $("#closeModalButton").click(function () {
+                    $("#settingsModal").hide();
+                });
+
+                var apiKeyInput = document.getElementById("apiKeyInput");
+
+                // Save Settings
+                $("#saveSettingsButton").click(function () {
+                    var newApiKey = apiKeyInput.value.trim();
+                    if (newApiKey !== '') {
+                        localStorage.setItem('apiKey', newApiKey);
+                    } else {
+                        localStorage.removeItem('apiKey');
+                    }
+
+                    // Reload page
+                    location.reload();
+                });
+
+                $("#saveSettingsButton").click(function () {
+                    var apiKey = $("#apiKeyInput").val().trim();
+                    localStorage.setItem('apiKey', apiKey);
+                    $("#settingsModal").hide();
+                });
+
+                $("#copyRight").click(function () {
+                    window.location.href = "https://twitter.com/inoue2002";
+                });
+
+                function appendMessage(role, content, index) {
+                    $("#chatHistory").append('<div class="message ' + role + '" data-index="' + index + '">' + content + '<span class="deleteButton">x</span></div>');
+                }
+
+                function updateMessage(role, content, index) {
+                    var messageElement = $(".message[data-index='" + index + "']");
+                    messageElement.removeClass("waiting-message");
+                    messageElement.html(content + '<span class="deleteButton">x</span>');
+                }
+            });
+        </script>
+    </div>
+</body>
+
+</html>
